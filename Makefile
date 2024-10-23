@@ -10,3 +10,6 @@ generate:
 
 stubs:
 	goa example github.com/shamhub/goa-example/api
+
+build:
+	go build -o server-binary ./cmd/server && go build -o client-binary ./cmd/server-cli

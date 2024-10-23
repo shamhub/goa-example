@@ -1,3 +1,5 @@
 .idea
 
 .vscode
+server-binary
+client-binary
