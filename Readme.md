@@ -1,6 +1,6 @@
 # Goa project
 
-A project for a case study
+A project for Outh 2 authentication
 
 ## Requirements 
 
