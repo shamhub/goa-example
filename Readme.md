@@ -1,6 +1,6 @@
 # Goa project
 
-A project for Outh 2 authentication
+A project for Outh 2 authentication (client credentials flow)
 
 
 
