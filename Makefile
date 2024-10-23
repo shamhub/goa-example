@@ -6,4 +6,4 @@ clean:
 	@rm -rf ./gen
 
 generate:
-	goa gen github.com/sgerogia/hello-goa/api
+	goa gen github.com/shamhub/goa-example/api
