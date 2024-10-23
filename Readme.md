@@ -1,6 +1,6 @@
 # Goa project
 
-A project for Outh 2 authentication (client credentials flow)
+A project for Outh 2 authentication (client credentials flow) with a token generation endpoint `/auth`
 
 
 
