@@ -7,3 +7,6 @@ clean:
 
 generate:
 	goa gen github.com/shamhub/goa-example/api
+
+stubs:
+	goa example github.com/shamhub/goa-example/api
