@@ -11,9 +11,9 @@ import (
 	"sync"
 	"syscall"
 
-	mathapi "github.com/shamhub/goa-example"
 	math "github.com/shamhub/goa-example/gen/math"
 	token "github.com/shamhub/goa-example/gen/token"
+	mathapi "github.com/shamhub/goa-example/logic"
 	"goa.design/clue/debug"
 	"goa.design/clue/log"
 )
