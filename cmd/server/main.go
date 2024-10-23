@@ -11,60 +11,42 @@ import (
 	"sync"
 	"syscall"
 
+	"log"
+
+	jwtgo "github.com/dgrijalva/jwt-go"
 	math "github.com/shamhub/goa-example/gen/math"
 	token "github.com/shamhub/goa-example/gen/token"
-	mathapi "github.com/shamhub/goa-example/logic"
-	"goa.design/clue/debug"
-	"goa.design/clue/log"
+	"github.com/shamhub/goa-example/logic"
 )
+
+type domainInfo struct {
+	defaultAddr string
+	domain      string
+	port        string
+	secure      bool
+}
 
 func main() {
 	// Define command line flags, add any other flag required to configure the
 	// service.
 	var (
-		hostF     = flag.String("host", "local", "Server host (valid values: local)")
-		domainF   = flag.String("domain", "", "Host domain name (overrides host domain specified in service design)")
-		httpPortF = flag.String("http-port", "", "HTTP port (overrides host HTTP port specified in service design)")
-		secureF   = flag.Bool("secure", false, "Use secure scheme (https or grpcs)")
-		dbgF      = flag.Bool("debug", false, "Log request and response bodies")
+		hostF       = flag.String("host", "local", "Server host (valid values: local)")
+		domainF     = flag.String("domain", "", "Host domain name (overrides host domain specified in service design)")
+		httpPortF   = flag.String("http-port", "", "HTTP port (overrides host HTTP port specified in service design)")
+		secureF     = flag.Bool("secure", false, "Use secure scheme (https or grpcs)")
+		dbgF        = flag.Bool("debug", false, "Log request and response bodies")
+		privateKeyF = flag.String("private-key", "", "The RSA private key file for JWT signing in PEM format\nIt must not be password-protected.")
+		publicKeyF  = flag.String("public-key", "", "The RSA public key file for JWT verification in PEM format")
+		jwtExpiryF  = flag.Int("jwt-expiry", 60, "The lifetime of the generated JWT in minutes\nDefaults to 60 (1h)")
 	)
 	flag.Parse()
 
 	// Setup logger. Replace logger with your own log package of choice.
-	format := log.FormatJSON
-	if log.IsTerminal() {
-		format = log.FormatTerminal
-	}
-	ctx := log.Context(context.Background(), log.WithFormat(format))
-	if *dbgF {
-		ctx = log.Context(ctx, log.WithDebug())
-		log.Debugf(ctx, "debug logs enabled")
-	}
-	log.Print(ctx, log.KV{K: "http-port", V: *httpPortF})
-
-	// Initialize the services.
 	var (
-		tokenSvc token.Service
-		mathSvc  math.Service
+		logger *log.Logger
 	)
 	{
-		tokenSvc = mathapi.NewToken()
-		mathSvc = mathapi.NewMath()
-	}
-
-	// Wrap the services in endpoints that can be invoked from other services
-	// potentially running in different processes.
-	var (
-		tokenEndpoints *token.Endpoints
-		mathEndpoints  *math.Endpoints
-	)
-	{
-		tokenEndpoints = token.NewEndpoints(tokenSvc)
-		tokenEndpoints.Use(debug.LogPayloads())
-		tokenEndpoints.Use(log.Endpoint)
-		mathEndpoints = math.NewEndpoints(mathSvc)
-		mathEndpoints.Use(debug.LogPayloads())
-		mathEndpoints.Use(log.Endpoint)
+		logger = log.New(os.Stderr, "[mathapi] ", log.Ltime)
 	}
 
 	// Create channel used by both the signal handler and server goroutines
@@ -80,45 +62,103 @@ func main() {
 	}()
 
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 
+	var u *url.URL
+	startServer := true
 	// Start the servers and send errors (if any) to the error channel.
 	switch *hostF {
 	case "local":
 		{
-			addr := "http://localhost:8080"
-			u, err := url.Parse(addr)
-			if err != nil {
-				log.Fatalf(ctx, err, "invalid URL %#v\n", addr)
+
+			d := domainInfo{
+				defaultAddr: "http://localhost:8080",
+				port:        *httpPortF,
+				domain:      *domainF,
+				secure:      *secureF,
 			}
-			if *secureF {
-				u.Scheme = "https"
-			}
-			if *domainF != "" {
-				u.Host = *domainF
-			}
-			if *httpPortF != "" {
-				h, _, err := net.SplitHostPort(u.Host)
-				if err != nil {
-					log.Fatalf(ctx, err, "invalid URL %#v\n", u.Host)
-				}
-				u.Host = net.JoinHostPort(h, *httpPortF)
-			} else if u.Port() == "" {
-				u.Host = net.JoinHostPort(u.Host, "80")
-			}
-			handleHTTPServer(ctx, u, tokenEndpoints, mathEndpoints, &wg, errc, *dbgF)
+
+			u = canonicalAddress(d, logger)
 		}
 
 	default:
-		log.Fatal(ctx, fmt.Errorf("invalid host argument: %q (valid hosts: local)", *hostF))
+		startServer = false
+		logger.Fatalf("invalid host argument: %q (valid hosts: local)\n", *hostF)
+	}
+
+	logger.Printf("URL: %s", u)
+
+	if startServer {
+		// Initialize the services.
+		var (
+			tokenSvc token.Service
+			mathSvc  math.Service
+		)
+
+		pk, err := os.ReadFile(*publicKeyF)
+		check(err, "invalid public key file", logger)
+
+		k, err := os.ReadFile(*privateKeyF)
+		check(err, "invalid private key file", logger)
+
+		pKey, err := jwtgo.ParseRSAPublicKeyFromPEM(pk)
+		check(err, "invalid public key", logger)
+
+		key, err := jwtgo.ParseRSAPrivateKeyFromPEM(k)
+		check(err, "invalid private key", logger)
+
+		{
+			tokenSvc = logic.NewToken(logger, u.String(), key, jwtExpiryF)
+			mathSvc = logic.NewMath(logger, u.String(), pKey, jwtExpiryF)
+		}
+
+		// Wrap the services in endpoints that can be invoked from other services
+		// potentially running in different processes.
+		var (
+			tokenEndpoints *token.Endpoints
+			mathEndpoints  *math.Endpoints
+		)
+		{
+			tokenEndpoints = token.NewEndpoints(tokenSvc)
+			mathEndpoints = math.NewEndpoints(mathSvc)
+		}
+		handleHTTPServer(ctx, u, tokenEndpoints, mathEndpoints, &wg, errc, logger, *dbgF)
 	}
 
 	// Wait for signal.
-	log.Printf(ctx, "exiting (%v)", <-errc)
+	logger.Printf("exiting (%v)", <-errc)
 
 	// Send cancellation signal to the goroutines.
 	cancel()
 
 	wg.Wait()
-	log.Printf(ctx, "exited")
+	logger.Println("exited")
+}
+
+// Populates a canonical URL based on a struct of commande line args
+func canonicalAddress(d domainInfo, logger *log.Logger) *url.URL {
+	u, err := url.Parse(d.defaultAddr)
+	check(err, fmt.Sprintf("invalid URL %#v: %s\n", d.defaultAddr, err), logger)
+	if d.secure {
+		u.Scheme = "https"
+	}
+	if d.domain != "" {
+		u.Host = d.domain
+	}
+	if d.port != "" {
+		h, _, err := net.SplitHostPort(u.Host)
+		check(err, fmt.Sprintf("invalid URL %#v: %s\n", u.Host, err), logger)
+		u.Host = net.JoinHostPort(h, d.port)
+	} else if u.Port() == "" {
+		u.Host = net.JoinHostPort(u.Host, "80")
+	}
+
+	return u
+}
+
+func check(e error, msg string, logger *log.Logger) {
+	if e != nil {
+		logger.Fatalf(msg)
+		panic(any(e))
+	}
 }

@@ -3,6 +3,7 @@ module github.com/shamhub/goa-example
 go 1.22.5
 
 require (
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	goa.design/clue v1.0.7
 	goa.design/goa/v3 v3.19.1
 )
