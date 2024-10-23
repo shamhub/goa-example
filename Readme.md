@@ -2,6 +2,10 @@
 
 A project for Outh 2 authentication
 
+
+
+![DSL entities](image.png)
+
 ## Requirements 
 
 * Go 1.22
