@@ -1,6 +1,6 @@
 module github.com/shamhub/goa-example
 
-go 1.22.5
+go 1.20
 
 require goa.design/goa/v3 v3.19.1
 
