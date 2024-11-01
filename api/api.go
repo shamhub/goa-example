@@ -13,6 +13,7 @@ var _ = API("math", func() {
 
 		Host("local", func() {
 			URI("http://localhost:8080")
+			URI("grpc://localhost:8080")
 		})
 	})
 })
