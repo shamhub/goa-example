@@ -11,3 +11,8 @@ A project for a case study
 
 To generate the Goa scaffolding code  
 `make generate`
+
+
+
+# References
+Pick example from git@github.com:goadesign/examples.git
