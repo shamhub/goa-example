@@ -4,7 +4,7 @@ A project for a case study
 
 ## Requirements 
 
-* Go 1.22
+* Go 1.20
 * Make
 
 ## Usage 
@@ -15,4 +15,4 @@ To generate the Goa scaffolding code
 
 
 # References
-Pick example from git@github.com:goadesign/examples.git
+Pick example from `git@github.com:goadesign/examples.git`
